@@ -19,7 +19,9 @@ data class StatisticsUiState(
     val categories: Map<Long, Category> = emptyMap(),
     val yearlyStats: List<YearlyStats> = emptyList(),
     val selectedYear: Year? = null,
+    val selectedCategoryId: Long? = null,
     val expandedMonths: Set<YearMonth> = emptySet(),
+    val showCategoryFilterDialog: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null
 ) {
@@ -31,5 +33,8 @@ data class StatisticsUiState(
 sealed interface StatisticsAction {
     data class SelectYear(val year: Year) : StatisticsAction
     data class ToggleMonthExpanded(val yearMonth: YearMonth) : StatisticsAction
+    data class SelectCategory(val categoryId: Long?) : StatisticsAction
+    object ShowCategoryFilterDialog : StatisticsAction
+    object DismissCategoryFilterDialog : StatisticsAction
 }
 

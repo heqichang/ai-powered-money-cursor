@@ -59,6 +59,9 @@ class StatisticsViewModel @Inject constructor(
         when (action) {
             is StatisticsAction.SelectYear -> selectYear(action.year)
             is StatisticsAction.ToggleMonthExpanded -> toggleMonthExpanded(action.yearMonth)
+            is StatisticsAction.SelectCategory -> selectCategory(action.categoryId)
+            is StatisticsAction.ShowCategoryFilterDialog -> showCategoryFilterDialog()
+            is StatisticsAction.DismissCategoryFilterDialog -> dismissCategoryFilterDialog()
         }
     }
 
@@ -76,6 +79,18 @@ class StatisticsViewModel @Inject constructor(
             }
             state.copy(expandedMonths = expandedMonths)
         }
+    }
+
+    private fun selectCategory(categoryId: Long?) {
+        _uiState.update { it.copy(selectedCategoryId = categoryId, showCategoryFilterDialog = false) }
+    }
+
+    private fun showCategoryFilterDialog() {
+        _uiState.update { it.copy(showCategoryFilterDialog = true) }
+    }
+
+    private fun dismissCategoryFilterDialog() {
+        _uiState.update { it.copy(showCategoryFilterDialog = false) }
     }
 
     private fun calculateYearlyStats(transactions: List<com.heqichang.dailymoney2.domain.model.MoneyTransaction>): List<YearlyStats> {

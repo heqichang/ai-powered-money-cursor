@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -21,11 +22,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.heqichang.dailymoney2.domain.model.Category
 import com.heqichang.dailymoney2.domain.model.MoneyTransaction
 import com.heqichang.dailymoney2.presentation.shared.LedgerSelectionViewModel
 import java.text.DecimalFormat
@@ -94,6 +98,11 @@ fun StatisticsScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
+                },
+                actions = {
+                    IconButton(onClick = { onAction(StatisticsAction.ShowCategoryFilterDialog) }) {
+                        Icon(Icons.Default.FilterList, contentDescription = "分类筛选")
+                    }
                 }
             )
         }
@@ -114,12 +123,28 @@ fun StatisticsScreen(
                     onSelect = { onAction(StatisticsAction.SelectYear(it)) }
                 )
                 
-                // 当年支出总额
+                // 当年支出总额（考虑分类筛选）
                 val selectedYearStats = state.yearlyStats.firstOrNull { it.year == selected }
+                val filteredExpense = if (selectedYearStats != null) {
+                    val filteredTransactions = state.transactions
+                        .filter { Year.from(it.occurredOn) == selected }
+                        .let { transactions ->
+                            if (state.selectedCategoryId != null) {
+                                transactions.filter { it.categoryId == state.selectedCategoryId }
+                            } else {
+                                transactions
+                            }
+                        }
+                    filteredTransactions
+                        .filter { it.amountInCents < 0 }
+                        .sumOf { it.amountInCents }
+                } else {
+                    0L
+                }
                 selectedYearStats?.let { stats ->
                     YearlyExpenseCard(
                         year = stats.year,
-                        expenseInCents = stats.expenseInCents
+                        expenseInCents = filteredExpense
                     )
                 }
             }
@@ -131,7 +156,8 @@ fun StatisticsScreen(
                 val selectedYear = state.selectedYear ?: state.yearlyStats.firstOrNull()?.year
                 val monthGroups = groupTransactionsByMonth(
                     transactions = state.transactions,
-                    selectedYear = selectedYear
+                    selectedYear = selectedYear,
+                    selectedCategoryId = state.selectedCategoryId
                 )
                 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -149,6 +175,18 @@ fun StatisticsScreen(
             state.errorMessage?.let { error ->
                 Text(text = error, color = MaterialTheme.colorScheme.error)
             }
+        }
+        
+        // 分类筛选对话框
+        if (state.showCategoryFilterDialog) {
+            CategoryFilterDialog(
+                categories = state.categories.values.sortedBy { it.name },
+                selectedCategoryId = state.selectedCategoryId,
+                onSelectCategory = { categoryId ->
+                    onAction(StatisticsAction.SelectCategory(categoryId))
+                },
+                onDismiss = { onAction(StatisticsAction.DismissCategoryFilterDialog) }
+            )
         }
     }
 }
@@ -322,12 +360,18 @@ private fun TransactionItem(
 
 private fun groupTransactionsByMonth(
     transactions: List<MoneyTransaction>,
-    selectedYear: Year?
+    selectedYear: Year?,
+    selectedCategoryId: Long?
 ): List<MonthGroup> {
-    val filtered = if (selectedYear != null) {
+    var filtered = if (selectedYear != null) {
         transactions.filter { Year.from(it.occurredOn) == selectedYear }
     } else {
         transactions
+    }
+    
+    // 应用分类筛选
+    if (selectedCategoryId != null) {
+        filtered = filtered.filter { it.categoryId == selectedCategoryId }
     }
     
     return filtered.groupBy { YearMonth.from(it.occurredOn) }
@@ -361,4 +405,51 @@ private fun Long.toCurrencyDisplay(): String {
 private fun Long.toExpenseDisplay(): String {
     val amount = kotlin.math.abs(this) / 100.0
     return DecimalFormat("#,##0.00").format(amount)
+}
+
+@Composable
+private fun CategoryFilterDialog(
+    categories: List<Category>,
+    selectedCategoryId: Long?,
+    onSelectCategory: (Long?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择分类") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(400.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // "全部" 选项
+                FilterChip(
+                    selected = selectedCategoryId == null,
+                    onClick = { onSelectCategory(null) },
+                    label = { Text("全部") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // 分类列表
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(categories) { category ->
+                        FilterChip(
+                            selected = category.id == selectedCategoryId,
+                            onClick = { onSelectCategory(category.id) },
+                            label = { Text(category.name) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("确定")
+            }
+        }
+    )
 }
