@@ -16,6 +16,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -97,6 +98,7 @@ fun TransactionEntryRoute(
     
     TransactionEntryScreen(
         state = uiState,
+        isEditMode = transactionId != null,
         onBack = onBack,
         onAction = viewModel::onAction
     )
@@ -106,6 +108,7 @@ fun TransactionEntryRoute(
 @Composable
 fun TransactionEntryScreen(
     state: TransactionEntryUiState,
+    isEditMode: Boolean = false,
     onBack: () -> Unit,
     onAction: (TransactionEntryAction) -> Unit,
     modifier: Modifier = Modifier
@@ -118,19 +121,29 @@ fun TransactionEntryScreen(
     }
     var isUserInputting by rememberSaveable { mutableStateOf(false) }
     
-    // 只在非用户输入状态下更新输入框（例如编辑模式加载数据时）
+    // 只在编辑模式下（有id）且非用户输入状态下更新输入框
     LaunchedEffect(state.draft.amountInCents, state.draft.id) {
-        if (!isUserInputting) {
+        if (state.draft.id != null && !isUserInputting) {
+            // 编辑模式：从草稿金额更新输入框
             val newValue = kotlin.math.abs(state.draft.amountInCents).toCurrencyInputString()
             if (newValue != amountInput) {
                 amountInput = newValue
             }
+        } else if (state.draft.id == null && !isUserInputting) {
+            // 新建模式：保持输入框为空
+            if (amountInput.isNotEmpty() && state.draft.amountInCents == 0L) {
+                amountInput = ""
+            }
         }
     }
     
-    // 进入页面时自动聚焦到金额输入框
-    LaunchedEffect(Unit) {
-        amountFocusRequester.requestFocus()
+    // 进入页面时自动聚焦到金额输入框（仅新建模式）
+    LaunchedEffect(isEditMode) {
+        if (!isEditMode) {
+            // 延迟一小段时间确保 UI 已完全渲染
+            kotlinx.coroutines.delay(100)
+            amountFocusRequester.requestFocus()
+        }
     }
     Scaffold(
         modifier = modifier,
@@ -184,12 +197,8 @@ fun TransactionEntryScreen(
                         .toEpochMilli()
                 )
                 
-                AlertDialog(
+                DatePickerDialog(
                     onDismissRequest = { showDatePicker = false },
-                    title = { Text("选择日期") },
-                    text = {
-                        DatePicker(state = datePickerState)
-                    },
                     confirmButton = {
                         TextButton(
                             onClick = {
@@ -210,7 +219,9 @@ fun TransactionEntryScreen(
                             Text("取消")
                         }
                     }
-                )
+                ) {
+                    DatePicker(state = datePickerState)
+                }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
